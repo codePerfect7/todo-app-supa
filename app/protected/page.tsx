@@ -4,6 +4,10 @@ import { createClient } from "@/utils/supabase/server";
 import FetchDataSteps from "@/components/tutorial/FetchDataSteps";
 import Header from "@/components/Header";
 import { redirect } from "next/navigation";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Button} from "@/components/ui/button";
+import {revalidatePath} from "next/cache";
+import {Input} from "@/components/ui/input";
 
 export default async function ProtectedPage() {
   const supabase = createClient();
@@ -15,6 +19,9 @@ export default async function ProtectedPage() {
   if (!user) {
     return redirect("/login");
   }
+
+  const {data, error} = await supabase.from('todos').select('*');
+
 
   return (
     <div className="flex-1 w-full flex flex-col gap-20 items-center">
@@ -31,27 +38,51 @@ export default async function ProtectedPage() {
         </nav>
       </div>
 
-      <div className="animate-in flex-1 flex flex-col gap-20 opacity-0 max-w-4xl px-3">
-        <Header />
-        <main className="flex-1 flex flex-col gap-6">
-          <h2 className="font-bold text-4xl mb-4">Next steps</h2>
-          <FetchDataSteps />
-        </main>
-      </div>
 
-      <footer className="w-full border-t border-t-foreground/10 p-8 flex justify-center text-center text-xs">
-        <p>
-          Powered by{" "}
-          <a
-            href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-            target="_blank"
-            className="font-bold hover:underline"
-            rel="noreferrer"
-          >
-            Supabase
-          </a>
-        </p>
-      </footer>
+      <form action={async (formdata: FormData) => {
+        'use server'
+        const supabase = createClient();
+        const {error} = await supabase.from('todos').insert({
+          task: formdata.get('task') as string,
+          user_id: user?.id
+        });
+        if(error) console.error(error.message);
+        revalidatePath('/');
+      }}>
+
+        <div className={'flex m-4 gap-2 max-w-[50vw] mx-auto'}>
+          <Input name={'task'} />
+          <Button variant={'outline'} type={'submit'}>Add Todo</Button>
+        </div>
+
+        {!data || data.length == 0 ? 'No data found' : <div className={'flex flex-wrap gap-4 max-w-[75vw]'}>
+
+          {data.map(todo => {
+            return <Card>
+              <CardHeader>
+                <CardTitle>{todo.task}</CardTitle>
+                <CardDescription>{(new Date(todo.inserted_at)).toDateString()}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button disabled={todo.is_complete} formAction={async () => {
+                  'use server'
+                  const supabase = createClient();
+                  const {error} = await supabase.from('todos').update({
+                    is_complete: true
+                  }).eq('id', todo.id);
+                  if(error) console.error(error.message);
+                  revalidatePath('/protected');
+                }}>
+                  {todo.is_complete ? 'Completed' : 'Mark as Completed'}
+                </Button>
+              </CardContent>
+            </Card>
+          })}
+
+        </div>}
+      </form>
+
+
     </div>
   );
 }
